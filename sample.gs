@@ -1,49 +1,63 @@
+// 初期化 スクリプトプロパティの読み込み
+var TEMPLATE_DOC_ID       = PropertiesService.getScriptProperties().getProperty("TEMPLATE_DOC_ID");       // テンプレートドキュメントID
+var RESULT_SPREAD_ID      = PropertiesService.getScriptProperties().getProperty("RESULT_SPREAD_ID");      // フォーム回答スプレッドシートID
+var SAVE_FOLDER_NAME      = PropertiesService.getScriptProperties().getProperty("SAVE_FOLDER_NAME");      // 保存先フォルダID
+var TITLE_WORD_COLUMN_NUM = PropertiesService.getScriptProperties().getProperty("TITLE_WORD_COLUMN_NUM"); // タイトル名に使用するカラム列数
+
+// 初期化 スプレッドシートオブジェクトの読み込み(スプレッドオブジェクトはスクリプト起動時に全て読み込む)
+var resultSpread = SpreadsheetApp.openById(RESULT_SPREAD_ID); // フォーム回答スプレッドオブジェクト変数
+var resultSheet  = resultSpread.getActiveSheet();             // フォーム回答スプレッドシートオブジェト変数
+
+/**
+* フォーム送信トリガー用メイン関数
+* @param {int} [line]            - スプレッドシートの指定行
+* @return {string} [newFileName] - 作成ドキュメントのファイル名
+*/
 function main() {
-  var templateDocId  = '1s9lEtv-V3n950TZvGFUqTVQolN20Q-7VNp6H96y0toA';
-  var resultSpreadId = '1uKZB1hd_G0M8rMwerrhdtrtqHe0vzOax7w-bY5YsV5w';
-  var saveFolderName = '189RYydvQYAMmGFfNHES8hoijlJAQDCwE';
-  
-  var newFileName    = getDate('yyyyMMdd') + '_コピーファイル';
-  
-  // テンプレートファイルから新規コピーを作成
-  var newFile = copyDocument(templateDocId, newFileName, saveFolderName);
-  // 文言を差し替え
-  replaceDocument(newFile.getId());
+  createDocument();
 }
 
-function check(){
-  var resultSpreadId = '1uKZB1hd_G0M8rMwerrhdtrtqHe0vzOax7w-bY5YsV5w';
-  var resultSpread = SpreadsheetApp.openById(resultSpreadId);
-  var resultSheet = resultSpread.getActiveSheet();
-  var rows = resultSheet.getRange(2,1,1,30).getValues();
-  Logger.log(rows[0][1]);
-
-//  for(var i=2;i<=rowSheet;i++){
-// 
-//    var strTimeStamp =resultSpread.getRange(i,1).getValue(); //社名
-//    var strYMD       =resultSpread.getRange(i,2).getValue(); //姓
-//    var strAddress   =resultSpread.getRange(i,3).getValue();　//名
-// 
-//    var strBody=strDoc.replace(/Name}/,'soggggaaa').replace(/gggg/,strYMD).replace(/Hogera/,strAddress); //社名、姓名を置換
-//    Logger.log(strBody); //ドキュメントの内容をログに表示
-//  }
-}
-
-function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  var menu = ui.createMenu('メッセージ表示');
-  menu.addItem('Hello world! 実行', 'myFunction');
-  menu.addToUi();
-}
- 
+/**
+* スプレッドシートメニューから実行
+* @param {int} [line]            - スプレッドシートの指定行
+* @return {string} [newFileName] - 作成ドキュメントのファイル名
+*/
 function myFunction() {
-  Browser.msgBox('Hello world!');
+  if (resultSheet.getLastRow() < 2) {
+      Browser.msgBox('データが1件も登録されていません。');
+      return;
+  }
+
+  var line = Browser.inputBox('データ行数を半角数字で入力して下さい。(2 ～' + resultSheet.getLastRow() + ')');
+  
+  if (line < 2 || line > resultSheet.getLastRow()) {
+      Browser.msgBox('出力できるデータがありません。');
+      return;
+  }
+  
+  var newFileName = createDocument(line);
+  Browser.msgBox('Document「' + newFileName + '」を生成しました。');
+}
+
+/**
+* テンプレートドキュメントコピー後、スプレッドシートの指定行内容で置換
+* 行数未指定の場合は最終行として処理
+* @param {int} [line]            - スプレッドシートの指定行
+* @return {string} [newFileName] - 作成ドキュメントのファイル名
+*/
+function createDocument(line) {
+  if (line === undefined) line = resultSheet.getLastRow();
+  var newFileName = getDate('yyyyMMdd') + '_' + getWord(TITLE_WORD_COLUMN_NUM, line); // 作成ドキュメントファイル名を生成
+  var newFile = copyDocument(TEMPLATE_DOC_ID, newFileName, SAVE_FOLDER_NAME);   // テンプレートファイルからドキュメントコピーファイルを作成
+  replaceDocument(newFile.getId(), line);                                       // 文言を差し替え
+  
+  return newFileName;
 }
 
 /**
 * GoogleDrive上でのファイルコピー
-* @param {string} [fieldId] - コピー元ファイルID
-* @param {string} [name] - 作成ファイル名
+* @param {string} [fieldId]     - コピー元ファイルID
+* @param {string} [name]        - 作成ファイル名
 * @param {string} [destination] - 作成フォルダID
 * @return {file}
 */
@@ -56,40 +70,48 @@ function copyDocument(fileId, name, folderId)
   return file.makeCopy(name, destination);
 }
 
-function replaceDocument(docId){
+/**
+* GoogleDrive上でのファイルコピー(置換文字列は{{{target}}}とする)
+* @param {string} [docId] - 置換対象のドキュメントファイルID
+* @param {string} [line]  - 置換対象のスプレッドシートの行数
+*/
+function replaceDocument(docId, line){
   var doc = DocumentApp.openById(docId);
   var body = doc.getBody();
+  Logger.log('replaceDocument:LINE = ' + line); 
   
-  body.replaceText('ここにテキストを挿入', 'KOKONITEXT');
-  body.replaceText('{{Name}}', 'IKEDA');
-  
-  doc.saveAndClose();
+  var headerRow  = resultSheet.getRange(1,1,1,resultSheet.getLastColumn()).getValues();
+  var replaceRow = resultSheet.getRange(line,1,1,resultSheet.getLastColumn()).getValues();
+    
+  for(ColNum in headerRow[0]) {
+    if (headerRow[0][ColNum] == "") continue;
+    
+    var headerStr  = '\\{\\{\\{' + headerRow[0][ColNum] + '\\}\\}\\}';
+    var replaceStr = formatValue(replaceRow[0][ColNum]);
+    
+    body.replaceText(headerStr, replaceStr);
+    Logger.log(headerStr + ' → ' + replaceStr);  
+  }
 }
 
-function insertName(){
+function formatValue(str) {
+  // Date型はyyyy/MM/ddに変更
+  if (Object.prototype.toString.call(str) === "[object Date]") {
+    str = Utilities.formatDate(str, 'JST', 'yyyy/MM/dd');
+  }
+  
+  return str;
+}
+
+/**
+* フォーム回答スプレッドシートから特定のセル値を取得
+* @param {int} column   - 左から何列目か(1列目の場合は1)
+* @return {string} line - 上から何行目か(1行目の場合は1)
+*/
+function getWord(column, line){
+  if (line == undefined) line = resultSheet.getLastRow();
  
-  /* スプレッドシートのシートを取得と準備 */
-  var resultSpread  = SpreadsheetApp.getActiveSheet(); //シートを取得
-  var rowSheet = resultSpread.getDataRange().getLastRow(); //シートの使用範囲のうち最終行を取得
- 
-  /* ドキュメント「メール本文テスト」を取得する */
-  var docTest=DocumentApp.openById("1s9lEtv-V3n950TZvGFUqTVQolN20Q-7VNp6H96y0toA"); //ドキュメントをIDで取得
-  var strDoc=docTest.getBody().getText(); //ドキュメントの内容を取得
-  docTest.getBody().replaceText('/Name/', 'sogwaaaaaaa');
-  docTest.getBody().getText().replace('/Name/', 'sogwaaaaaaa');
-//  var strBody=strDoc.replace(/Name/,'soggggaaa');
-  Logger.log(strDoc);
- 
-//  /* シートの全ての行について社名、姓名を差し込みログに表示*/
-//  for(var i=2;i<=rowSheet;i++){
-// 
-    var strTimeStamp =resultSpread.getRange(i,1).getValue(); //社名
-    var strYMD       =resultSpread.getRange(i,2).getValue(); //姓
-    var strAddress   =resultSpread.getRange(i,3).getValue();　//名
-// 
-//    var strBody=strDoc.replace(/Name}/,'soggggaaa').replace(/gggg/,strYMD).replace(/Hogera/,strAddress); //社名、姓名を置換
-//    Logger.log(strBody); //ドキュメントの内容をログに表示
-//  }
+  return resultSheet.getRange(line,column).getValue();
 }
 
 /**
@@ -101,4 +123,15 @@ function getDate(format){
   var date = new Date();
   date.setDate(date.getDate() + 7);
   return Utilities.formatDate(date, 'JST', format);
+}
+
+/**
+* メニュー追加用関数
+*/
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  var menu = ui.createMenu('回線新規申請');
+  menu.addItem('個別で作成', 'myFunction');
+  menu.addItem('全て作成', 'myFunction');
+  menu.addToUi();
 }
