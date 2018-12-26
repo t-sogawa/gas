@@ -14,6 +14,7 @@ var resultSheet  = resultSpread.getActiveSheet();             // フォーム回
 * @return {string} [newFileName] - 作成ドキュメントのファイル名
 */
 function main() {
+  Logger.log('replaceDocument:LINE = '); 
   createDocument();
 }
 
@@ -22,7 +23,7 @@ function main() {
 * @param {int} [line]            - スプレッドシートの指定行
 * @return {string} [newFileName] - 作成ドキュメントのファイル名
 */
-function myFunction() {
+function createDocumentInteractive() {
   if (resultSheet.getLastRow() < 2) {
       Browser.msgBox('データが1件も登録されていません。');
       return;
@@ -55,15 +56,32 @@ function createDocument(line) {
 }
 
 /**
-* GoogleDrive上でのファイルコピー
+* Docファイル新規作成(テンプレートコピー)
 * @param {string} [fieldId]     - コピー元ファイルID
 * @param {string} [name]        - 作成ファイル名
 * @param {string} [destination] - 作成フォルダID
 * @return {file}
 */
-function copyDocument(fileId, name, folderId)
+function copyDocument(fileId, newFileName) {
+  var tempDoc = DocumentApp.openById(fileId);
+  var newFile  = DocumentApp.create(newFileName);
+  
+  tempDoc.getBody().getParagraphs().forEach(function(value, i){
+    newFile.getBody().insertParagraph(i, value.copy());
+  });
+  return newFile;
+}
+
+/**
+* Docファイル新規作成(GoogleDriveコピー)
+* @param {string} [fieldId]     - コピー元ファイルID
+* @param {string} [name]        - 作成ファイル名
+* @param {string} [destination] - 作成フォルダID
+* @return {file}
+*/
+function copyDocumentByDrive(fileId, name, folderId)
 {
-  var file = DriveApp.getFileById(fileId);
+  var doc = DriveApp.getFileById(fileId);
   var destination = DriveApp.getFolderById(folderId);
   
   if (folderId == undefined) return file.makeCopy(name);
@@ -72,11 +90,11 @@ function copyDocument(fileId, name, folderId)
 
 /**
 * GoogleDrive上でのファイルコピー(置換文字列は{{{target}}}とする)
-* @param {string} [docId] - 置換対象のドキュメントファイルID
+* @param {string} [fileId] - 置換対象のドキュメントファイルID
 * @param {string} [line]  - 置換対象のスプレッドシートの行数
 */
-function replaceDocument(docId, line){
-  var doc = DocumentApp.openById(docId);
+function replaceDocument(fileId, line){
+  var doc = DocumentApp.openById(fileId);
   var body = doc.getBody();
   Logger.log('replaceDocument:LINE = ' + line); 
   
@@ -129,9 +147,9 @@ function getDate(format){
 * メニュー追加用関数
 */
 function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  var menu = ui.createMenu('回線新規申請');
-  menu.addItem('個別で作成', 'myFunction');
-  menu.addItem('全て作成', 'myFunction');
-  menu.addToUi();
+  var items = [
+    {name : "個別で作成"  , functionName : "createDocumentInteractive"},
+  ];
+  SpreadsheetApp.getActiveSpreadsheet().addMenu("Docを作成",items);
 }
+
