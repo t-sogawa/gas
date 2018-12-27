@@ -1,7 +1,6 @@
 // 初期化 スクリプトプロパティの読み込み
 var TEMPLATE_DOC_ID       = PropertiesService.getScriptProperties().getProperty("TEMPLATE_DOC_ID");       // テンプレートドキュメントID
 var RESULT_SPREAD_ID      = PropertiesService.getScriptProperties().getProperty("RESULT_SPREAD_ID");      // フォーム回答スプレッドシートID
-var SAVE_FOLDER_NAME      = PropertiesService.getScriptProperties().getProperty("SAVE_FOLDER_NAME");      // 保存先フォルダID
 var TITLE_WORD_COLUMN_NUM = PropertiesService.getScriptProperties().getProperty("TITLE_WORD_COLUMN_NUM"); // タイトル名に使用するカラム列数
 
 // 初期化 スプレッドシートオブジェクトの読み込み(スプレッドオブジェクトはスクリプト起動時に全て読み込む)
@@ -14,7 +13,6 @@ var resultSheet  = resultSpread.getActiveSheet();             // フォーム回
 * @return {string} [newFileName] - 作成ドキュメントのファイル名
 */
 function main() {
-  Logger.log('replaceDocument:LINE = '); 
   createDocument();
 }
 
@@ -24,20 +22,42 @@ function main() {
 * @return {string} [newFileName] - 作成ドキュメントのファイル名
 */
 function createDocumentInteractive() {
+  var nums = [];
+  var msg = '';
+  
   if (resultSheet.getLastRow() < 2) {
       Browser.msgBox('データが1件も登録されていません。');
       return;
   }
 
-  var line = Browser.inputBox('データ行数を半角数字で入力して下さい。(2 ～' + resultSheet.getLastRow() + ')');
+  var line = Browser.inputBox('出力する行を半角数字で入力して下さい。(有効値：2 ～' + resultSheet.getLastRow() + ')\\n\\n例:「2」or「3-5」or「3,8,11」\\n');
+  if (line == 'cancel') return;
   
-  if (line < 2 || line > resultSheet.getLastRow()) {
-      Browser.msgBox('出力できるデータがありません。');
-      return;
+  var regSingle = /^[0-9]{1,10}$/;           // 単一数値正規表現
+  var regRange  = /^[0-9]{1,9}-[0-9]{1,9}$/; // 範囲数値正規表現
+  var regList   = /^([0-9]+,)*([0-9]+)$/;    // 複数値正規表現
+  
+  if (line.match(regSingle)) { // 単一数値正規表現
+    createDocument(line);
+    msg = line + '行目のDocファイルを生成しました。';
+  } else if (line.match(regRange)) { // 範囲数値正規表現
+    nums = line.split('-').sort(function(a,b) { return a - b; });
+    for (i = nums[0]; i <= nums[1]; i++) {
+      createDocument(i);
+    }
+    msg = nums[0] + '～' + nums[1] + '行目のDocファイルを生成しました。';
+  } else if (line.match(regList)) { // 複数値正規表現
+      nums = line.split(',').sort(function(a,b) { return a - b; });
+      nums.forEach(function(i){
+        createDocument(i);
+    });
+      msg = nums + '行目のDocファイルを生成しました。';
+  } else {
+      msg = '失敗しました。入力方法を確認して下さい。';
   }
   
-  var newFileName = createDocument(line);
-  Browser.msgBox('Document「' + newFileName + '」を生成しました。');
+  Browser.msgBox(msg);  
+  return;
 }
 
 /**
@@ -49,7 +69,7 @@ function createDocumentInteractive() {
 function createDocument(line) {
   if (line === undefined) line = resultSheet.getLastRow();
   var newFileName = getDate('yyyyMMdd') + '_' + getWord(TITLE_WORD_COLUMN_NUM, line); // 作成ドキュメントファイル名を生成
-  var newFile = copyDocument(TEMPLATE_DOC_ID, newFileName, SAVE_FOLDER_NAME);   // テンプレートファイルからドキュメントコピーファイルを作成
+  var newFile = copyDocument(TEMPLATE_DOC_ID, newFileName);   // テンプレートファイルからドキュメントコピーファイルを作成
   replaceDocument(newFile.getId(), line);                                       // 文言を差し替え
   
   return newFileName;
@@ -152,4 +172,3 @@ function onOpen() {
   ];
   SpreadsheetApp.getActiveSpreadsheet().addMenu("Docを作成",items);
 }
-
